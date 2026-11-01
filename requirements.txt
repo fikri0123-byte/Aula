@@ -1,0 +1,15 @@
+# Torch versi CPU (tanpa CUDA) agar instalasi di Streamlit Cloud ringan
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+streamlit>=1.50
+pillow
+numpy
+
+# Model .pt = YOLOv8 hasil training dengan ultralytics 8.4.197
+ultralytics==8.4.197
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
+
+# Model .h5 disimpan dengan Keras 3.13 -> butuh Keras 3 (TensorFlow 2.16 ke atas)
+tensorflow-cpu>=2.20
+keras>=3.13
