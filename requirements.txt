@@ -1,17 +1,18 @@
 # Torch versi CPU (tanpa CUDA) agar instalasi di Streamlit Cloud ringan
 --extra-index-url https://download.pytorch.org/whl/cpu
-
+ 
 streamlit>=1.50
 pillow
 numpy
-
+ 
 # Model .pt = YOLOv8 hasil training dengan ultralytics 8.4.197
 # torch/torchvision sengaja tanpa versi: pip otomatis memilih build +cpu yang cocok dengan versi Python
 ultralytics==8.4.197
 torch
 torchvision
-
-# Model .h5 disimpan dengan Keras 3.13 -> butuh Keras 3 + TensorFlow.
-# TensorFlow belum punya paket untuk Python 3.14, jadi pakai Python 3.12 atau 3.13 saat deploy.
-tensorflow-cpu>=2.20; python_version < "3.14"
+ 
+# Model .h5 disimpan dengan Keras 3.13. Aplikasi memakai PyTorch sebagai backend Keras,
+# jadi TensorFlow TIDAK diperlukan dan Python 3.14 pun bisa dipakai.
 keras>=3.13
+h5py
+ 
