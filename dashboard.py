@@ -176,9 +176,18 @@ def predict_pt(model, img: Image.Image, conf: float) -> Prediction:
 
 
 # ─────────────────────────────── Keras (.h5) ───────────────────────────────
+def pick_keras_backend() -> str:
+    """Keras 3 butuh satu backend. Pakai TensorFlow jika terpasang, kalau tidak pakai PyTorch (sudah ada untuk YOLO)."""
+    if not os.environ.get("KERAS_BACKEND"):
+        import importlib.util
+
+        os.environ["KERAS_BACKEND"] = "tensorflow" if importlib.util.find_spec("tensorflow") else "torch"
+    return os.environ["KERAS_BACKEND"]
+
+
 @st.cache_resource(show_spinner="Memuat model Keras…")
 def load_h5(path: str):
-    os.environ.setdefault("KERAS_BACKEND", "tensorflow")
+    pick_keras_backend()
     import keras
 
     return keras.models.load_model(path, compile=False)
