@@ -58,6 +58,16 @@ LABELS = ["hitam", "kampung", "tiga belang"]
 # Diuji pada 36 gambar: akurasi 97% dengan urutan ini, 0% dengan urutan alfabetis (hitam, kampung, tiga belang).
 H5_CLASS_ORDER = ["tiga belang", "hitam", "kampung"]
 
+# Penyaring "apakah ada kucing?": model YOLOv8n umum (80 objek COCO, termasuk cat, dog, cow, bear, person).
+# Gambar tanpa kucing ditolak sebelum model identifikasi jenis dijalankan.
+GATE_PATH = BASE_DIR / "gate" / "yolov8n.pt"   # jika tidak ada, ultralytics mengunduh otomatis
+GATE_CONF = 0.30                               # ambang keyakinan deteksi kucing
+ID_NAMES = {
+    "person": "orang", "dog": "anjing", "cow": "sapi", "horse": "kuda", "sheep": "domba", "bear": "beruang",
+    "bird": "burung", "elephant": "gajah", "zebra": "zebra", "giraffe": "jerapah", "teddy bear": "boneka beruang",
+    "car": "mobil", "bicycle": "sepeda", "motorcycle": "motor", "chair": "kursi", "couch": "sofa", "bed": "kasur",
+}
+
 YOLO_IMGSZ = 640           # ukuran gambar saat training YOLO
 YOLO_CONF = 0.25           # ambang keyakinan deteksi (bisa diubah di aplikasi)
 H5_RESCALE = "div255"      # "div255" (0-1) atau "none" (0-255). Bisa diubah di aplikasi.
@@ -175,6 +185,35 @@ def predict_pt(model, img: Image.Image, conf: float) -> Prediction:
             scores[d.idx] = max(scores[d.idx], d.conf)
     dets.sort(key=lambda d: -d.conf)
     return Prediction(scores, dets, draw_boxes(img, dets) if dets else img)
+
+
+# ─────────────────────────────── Penyaring "ada kucing?" ───────────────────────────────
+@dataclass
+class GateResult:
+    has_cat: bool
+    cat_conf: float
+    others: list[tuple[str, float]]    # objek lain yang terdeteksi: (nama, keyakinan)
+
+
+@st.cache_resource(show_spinner="Memuat penyaring kucing…")
+def load_gate():
+    from ultralytics import YOLO
+
+    return YOLO(str(GATE_PATH) if GATE_PATH.exists() else "yolov8n.pt")
+
+
+def check_cat(img: Image.Image) -> GateResult:
+    gate = load_gate()
+    res = gate.predict(img, conf=GATE_CONF, verbose=False, device="cpu")[0]
+    cat_conf, seen = 0.0, {}
+    if res.boxes is not None and len(res.boxes) > 0:
+        for cid, c in zip(res.boxes.cls.tolist(), res.boxes.conf.tolist()):
+            name = str(gate.names[int(cid)]).lower()
+            if name == "cat":
+                cat_conf = max(cat_conf, float(c))
+            else:
+                seen[name] = max(seen.get(name, 0.0), float(c))
+    return GateResult(cat_conf > 0, cat_conf, sorted(seen.items(), key=lambda kv: -kv[1]))
 
 
 # ─────────────────────────────── Keras (.h5) ───────────────────────────────
@@ -488,6 +527,19 @@ def no_detection_html(model_name: str) -> str:
         "atau turunkan ambang keyakinan di Pengaturan lanjutan.</p></div>"
     )
 
+def not_cat_html(others: list[tuple[str, float]]) -> str:
+    if others:
+        names = ", ".join(f"{ID_NAMES.get(n, n)} ({c * 100:.0f}%)" for n, c in others[:3])
+        detail = f"Yang terdeteksi pada gambar: <b>{names}</b>."
+    else:
+        detail = "Tidak ada objek yang dikenali pada gambar."
+    return (
+        '<div class="result" style="--c:#8A8A85"><div class="m">Penyaring gambar</div><h2>Bukan kucing</h2>'
+        '<p class="d">Gambar ini tampaknya tidak berisi kucing, jadi model identifikasi jenis tidak dijalankan. '
+        f"{detail}</p><p class=\"d\">Coba unggah foto kucing yang jelas.</p></div>"
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 4. APLIKASI
 # ══════════════════════════════════════════════════════════════════════
@@ -546,6 +598,10 @@ def identify_section() -> None:
 
     conf, rescale = YOLO_CONF, H5_RESCALE
     with st.expander("Pengaturan lanjutan"):
+        use_gate = st.checkbox(
+            "Saring gambar yang bukan kucing (disarankan)", value=True,
+            help="Memeriksa dulu apakah ada kucing. Foto sapi, orang, atau hewan lain akan ditolak.",
+        )
         if any(available[n][0] == "pt" for n in selected):
             conf = st.slider("Ambang keyakinan deteksi (YOLO)", 0.05, 0.90, YOLO_CONF, 0.05)
         if any(available[n][0] == "h5" for n in selected):
@@ -566,6 +622,22 @@ def identify_section() -> None:
         return
 
     image = ImageOps.exif_transpose(Image.open(file)).convert("RGB")
+
+    if use_gate:
+        gate = None
+        try:
+            with st.spinner("Memeriksa apakah ada kucing…"):
+                gate = check_cat(image)
+        except Exception as e:  # noqa: BLE001
+            st.warning(f"Pemeriksaan kucing dilewati karena penyaring gagal dimuat: {e}")
+        if gate is not None and not gate.has_cat:
+            col_img, col_res = st.columns([1, 1.15], gap="medium")
+            with col_img:
+                st.image(image, use_container_width=True)
+            with col_res:
+                md(not_cat_html(gate.others))
+            return
+
     results = []
     for name in selected:
         kind, path = available[name]
