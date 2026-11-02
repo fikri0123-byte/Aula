@@ -52,9 +52,11 @@ H5_PATH = find_model(".h5", "model.h5")    # CNN Keras (klasifikasi), input 224x
 HERO_PATH = ASSETS_DIR / "hero.jpg"           # foto banner (opsional)
 
 # Urutan kelas. Model YOLO Anda: 0=Hitam, 1=Kampung, 2=Tiga Belang.
-# Untuk model .h5 urutannya DIASUMSIKAN sama (alfabetis, bawaan flow_from_directory / image_dataset_from_directory).
-# Jika hasil .h5 tertukar, ubah urutan ini.
 LABELS = ["hitam", "kampung", "tiga belang"]
+
+# Urutan keluaran model .h5 (indeks 0, 1, 2). BERBEDA dengan YOLO.
+# Diuji pada 36 gambar: akurasi 97% dengan urutan ini, 0% dengan urutan alfabetis (hitam, kampung, tiga belang).
+H5_CLASS_ORDER = ["tiga belang", "hitam", "kampung"]
 
 YOLO_IMGSZ = 640           # ukuran gambar saat training YOLO
 YOLO_CONF = 0.25           # ambang keyakinan deteksi (bisa diubah di aplikasi)
@@ -199,7 +201,13 @@ def predict_h5(model, img: Image.Image, rescale: str) -> Prediction:
     arr = np.asarray(img.resize((w, h)), dtype=np.float32)
     if rescale == "div255":
         arr = arr / 255.0
-    return Prediction(to_probs(model.predict(arr[None, ...], verbose=0)[0]))
+    raw = to_probs(model.predict(arr[None, ...], verbose=0)[0])
+    if len(raw) != len(H5_CLASS_ORDER):
+        return Prediction(raw)
+    probs = np.zeros(len(LABELS))
+    for i, name in enumerate(H5_CLASS_ORDER):   # petakan indeks keluaran model -> urutan LABELS
+        probs[LABELS.index(name)] = raw[i]
+    return Prediction(probs)
 
 
 # ─────────────────────────────── pintu masuk ───────────────────────────────
