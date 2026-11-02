@@ -31,8 +31,24 @@ st.set_page_config(page_title="Kenali Kucing", page_icon="🐈", layout="wide", 
 
 BASE_DIR = Path(__file__).parent
 ASSETS_DIR = BASE_DIR / "assets"
-PT_PATH = BASE_DIR / "model" / "model.pt"    # YOLOv8 (deteksi): Hitam, Kampung, Tiga Belang
-H5_PATH = BASE_DIR / "model" / "model.h5"    # CNN Keras (klasifikasi), input 224x224x3
+MODEL_DIRS = [BASE_DIR / "model", BASE_DIR / "models"]   # folder model boleh bernama model/ atau models/
+
+
+def find_model(ext: str, default_name: str) -> Path:
+    """Cari model/<default_name> atau models/<default_name>; kalau tidak ada, ambil file `ext` pertama di folder itu."""
+    for folder in MODEL_DIRS:
+        if (folder / default_name).exists():
+            return folder / default_name
+    for folder in MODEL_DIRS:
+        if folder.exists():
+            found = sorted(f for f in folder.glob("*") if f.suffix.lower() == ext)
+            if found:
+                return found[0]
+    return MODEL_DIRS[0] / default_name
+
+
+PT_PATH = find_model(".pt", "model.pt")    # YOLOv8 (deteksi): Hitam, Kampung, Tiga Belang
+H5_PATH = find_model(".h5", "model.h5")    # CNN Keras (klasifikasi), input 224x224x3
 HERO_PATH = ASSETS_DIR / "hero.jpg"           # foto banner (opsional)
 
 # Urutan kelas. Model YOLO Anda: 0=Hitam, 1=Kampung, 2=Tiga Belang.
